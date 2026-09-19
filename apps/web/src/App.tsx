@@ -145,6 +145,7 @@ function AdminPanel({ onClose }: { onClose: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [user, setUser] = useState<AdminUser | undefined>()
+  const [accessToken, setAccessToken] = useState('')
   const [message, setMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -167,6 +168,7 @@ function AdminPanel({ onClose }: { onClose: () => void }) {
       if (!response.ok || !payload.data) throw new Error(payload.message ?? 'Login failed')
       localStorage.setItem('bluestock_access_token', payload.data.accessToken)
       setUser(payload.data.user)
+      setAccessToken(payload.data.accessToken)
       setPassword('')
     } catch (loginError) {
       setMessage(loginError instanceof Error ? loginError.message : 'Login failed')
@@ -179,6 +181,7 @@ function AdminPanel({ onClose }: { onClose: () => void }) {
     await fetch(`${apiBaseUrl}/auth/logout`, { method: 'POST', credentials: 'include' })
     localStorage.removeItem('bluestock_access_token')
     setUser(undefined)
+    setAccessToken('')
   }
 
   return (
@@ -200,6 +203,7 @@ function AdminPanel({ onClose }: { onClose: () => void }) {
           <button className="primary-button" type="button" onClick={logout}>
             Log out
           </button>
+          <AdminDashboard token={accessToken} />
         </div>
       ) : (
         <form className="login-form" onSubmit={submitLogin}>
@@ -228,6 +232,178 @@ function AdminPanel({ onClose }: { onClose: () => void }) {
         </form>
       )}
     </section>
+  )
+}
+
+type AdminDashboardProps = { token: string }
+type AdminForm = {
+  id?: string
+  companyName: string
+  companySlug: string
+  priceBand: string
+  openDate: string
+  closeDate: string
+  issueSize: string
+  issueType: string
+  status: string
+}
+
+const emptyAdminForm: AdminForm = {
+  companyName: '',
+  companySlug: '',
+  priceBand: '',
+  openDate: '',
+  closeDate: '',
+  issueSize: '',
+  issueType: 'Book Built',
+  status: 'upcoming',
+}
+
+function AdminDashboard({ token }: AdminDashboardProps) {
+  const [records, setRecords] = useState<Ipo[]>([])
+  const [form, setForm] = useState<AdminForm>(emptyAdminForm)
+  const [message, setMessage] = useState('')
+  const [refresh, setRefresh] = useState(0)
+
+  useEffect(() => {
+    fetch(`${apiBaseUrl}/ipos?limit=50`)
+      .then(async (response) => response.json() as Promise<{ data: Ipo[] }>)
+      .then((payload) => setRecords(payload.data))
+      .catch(() => setMessage('Unable to load admin IPO records.'))
+  }, [refresh])
+
+  function updateField(field: keyof AdminForm, value: string) {
+    setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  async function saveIpo(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const method = form.id ? 'PATCH' : 'POST'
+    const endpoint = form.id ? `${apiBaseUrl}/ipos/${form.id}` : `${apiBaseUrl}/ipos`
+    const response = await fetch(endpoint, {
+      method,
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    const payload = (await response.json()) as { success: boolean; message?: string }
+    if (!response.ok) {
+      setMessage(payload.message ?? 'Unable to save IPO.')
+      return
+    }
+    setForm(emptyAdminForm)
+    setMessage(form.id ? 'IPO updated.' : 'IPO created.')
+    setRefresh((value) => value + 1)
+  }
+
+  async function removeIpo(id: string) {
+    if (!window.confirm('Delete this IPO record?')) return
+    const response = await fetch(`${apiBaseUrl}/ipos/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (response.ok) {
+      setMessage('IPO deleted.')
+      setRefresh((value) => value + 1)
+    } else setMessage('Unable to delete IPO.')
+  }
+
+  return (
+    <div className="admin-dashboard">
+      <div className="dashboard-title">
+        <div>
+          <p className="eyebrow">Admin workspace</p>
+          <h3>IPO records</h3>
+        </div>
+        <span>{records.length} records</span>
+      </div>
+      <div className="admin-record-list">
+        {records.map((record) => (
+          <div className="admin-record" key={record._id}>
+            <div>
+              <strong>{record.company.name}</strong>
+              <span>
+                {record.status} · {record.priceBand}
+              </span>
+            </div>
+            <div>
+              <button
+                className="text-button"
+                type="button"
+                onClick={() =>
+                  setForm({
+                    id: record._id,
+                    companyName: record.company.name,
+                    companySlug: record.company.name.toLowerCase().replaceAll(' ', '-'),
+                    priceBand: record.priceBand,
+                    openDate: record.openDate.slice(0, 10),
+                    closeDate: record.closeDate.slice(0, 10),
+                    issueSize: record.issueSize,
+                    issueType: 'Book Built',
+                    status: record.status,
+                  })
+                }
+              >
+                Edit
+              </button>
+              <button
+                className="text-button danger-button"
+                type="button"
+                onClick={() => removeIpo(record._id)}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <form className="ipo-form" onSubmit={saveIpo}>
+        <h3>{form.id ? 'Edit IPO' : 'Add IPO'}</h3>
+        <div className="form-grid">
+          {(
+            [
+              'companyName',
+              'companySlug',
+              'priceBand',
+              'openDate',
+              'closeDate',
+              'issueSize',
+              'issueType',
+            ] as const
+          ).map((field) => (
+            <label key={field}>
+              {field.replaceAll(/([A-Z])/g, ' $1')}
+              <input
+                type={field.includes('Date') ? 'date' : 'text'}
+                value={form[field]}
+                onChange={(event) => updateField(field, event.target.value)}
+                required
+              />
+            </label>
+          ))}
+          <label>
+            Status
+            <select
+              value={form.status}
+              onChange={(event) => updateField('status', event.target.value)}
+            >
+              <option value="upcoming">Upcoming</option>
+              <option value="ongoing">Ongoing</option>
+              <option value="closed">Closed</option>
+              <option value="listed">Listed</option>
+            </select>
+          </label>
+        </div>
+        {message && <p className="message">{message}</p>}
+        <button className="primary-button" type="submit">
+          {form.id ? 'Save changes' : 'Create IPO'}
+        </button>
+        {form.id && (
+          <button className="close-button" type="button" onClick={() => setForm(emptyAdminForm)}>
+            Cancel edit
+          </button>
+        )}
+      </form>
+    </div>
   )
 }
 
