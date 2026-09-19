@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import ipoRouter from './routes/ipo.routes.js'
 import authRouter from './routes/auth.routes.js'
+import uploadRouter from './routes/upload.routes.js'
 
 const app = express()
 app.use(helmet())
@@ -13,6 +14,7 @@ app.use(cookieParser())
 
 app.use('/api/v1/ipos', ipoRouter)
 app.use('/api/v1/auth', authRouter)
+app.use('/api/v1/uploads', uploadRouter)
 
 app.get('/api/v1/health', (_request, response) => {
   response.json({ success: true, data: { service: 'bluestock-ipo-api', status: 'ok' } })
@@ -30,6 +32,11 @@ app.use(
     _next: express.NextFunction,
   ) => {
     void _next
+    const parseError = error as { status?: number; type?: string }
+    if (parseError.status === 400 && parseError.type === 'entity.parse.failed') {
+      response.status(400).json({ success: false, message: 'Request body must contain valid JSON' })
+      return
+    }
     console.error(error)
     response.status(500).json({ success: false, message: 'Internal server error' })
   },
