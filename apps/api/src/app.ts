@@ -1,14 +1,18 @@
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
+import cookieParser from 'cookie-parser'
 import ipoRouter from './routes/ipo.routes.js'
+import authRouter from './routes/auth.routes.js'
 
 const app = express()
 app.use(helmet())
-app.use(cors({ origin: process.env.CLIENT_URL ?? 'http://localhost:5173' }))
+app.use(cors({ origin: process.env.CLIENT_URL ?? 'http://localhost:5173', credentials: true }))
 app.use(express.json())
+app.use(cookieParser())
 
 app.use('/api/v1/ipos', ipoRouter)
+app.use('/api/v1/auth', authRouter)
 
 app.get('/api/v1/health', (_request, response) => {
   response.json({ success: true, data: { service: 'bluestock-ipo-api', status: 'ok' } })

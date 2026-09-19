@@ -20,6 +20,7 @@ function App() {
   const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
+  const [showAdmin, setShowAdmin] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -51,7 +52,15 @@ function App() {
         <span className="brand-mark">B</span>
         <span>Bluestock IPO</span>
         <span className="topbar-label">MERN implementation</span>
+        <button
+          className="admin-link"
+          type="button"
+          onClick={() => setShowAdmin((visible) => !visible)}
+        >
+          Admin access
+        </button>
       </nav>
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
       <section className="hero-panel">
         <div>
           <p className="eyebrow">Public IPO market</p>
@@ -127,6 +136,98 @@ function App() {
         </div>
       </section>
     </main>
+  )
+}
+
+type AdminUser = { id: string; name: string; email: string; role: string }
+
+function AdminPanel({ onClose }: { onClose: () => void }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [user, setUser] = useState<AdminUser | undefined>()
+  const [message, setMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  async function submitLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setIsSubmitting(true)
+    setMessage('')
+    try {
+      const response = await fetch(`${apiBaseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password }),
+      })
+      const payload = (await response.json()) as {
+        success: boolean
+        message?: string
+        data?: { accessToken: string; user: AdminUser }
+      }
+      if (!response.ok || !payload.data) throw new Error(payload.message ?? 'Login failed')
+      localStorage.setItem('bluestock_access_token', payload.data.accessToken)
+      setUser(payload.data.user)
+      setPassword('')
+    } catch (loginError) {
+      setMessage(loginError instanceof Error ? loginError.message : 'Login failed')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function logout() {
+    await fetch(`${apiBaseUrl}/auth/logout`, { method: 'POST', credentials: 'include' })
+    localStorage.removeItem('bluestock_access_token')
+    setUser(undefined)
+  }
+
+  return (
+    <section className="admin-panel">
+      <div className="admin-panel-heading">
+        <div>
+          <p className="eyebrow">Protected workspace</p>
+          <h2>Admin access</h2>
+        </div>
+        <button className="close-button" type="button" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      {user ? (
+        <div className="admin-session">
+          <p className="message">
+            Signed in as <strong>{user.name}</strong> ({user.role})
+          </p>
+          <button className="primary-button" type="button" onClick={logout}>
+            Log out
+          </button>
+        </div>
+      ) : (
+        <form className="login-form" onSubmit={submitLogin}>
+          <label>
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+          </label>
+          {message && <p className="message error-message">{message}</p>}
+          <button className="primary-button" type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Signing in...' : 'Sign in'}
+          </button>
+        </form>
+      )}
+    </section>
   )
 }
 

@@ -16,6 +16,7 @@ Phase 1 is complete and Phase 2's first vertical slice is implemented:
 - Deterministic fallback seed records for local development without MongoDB credentials
 - Derived `listingGain` and `currentReturn` values in the API response
 - Repeatable MongoDB seed command and React public IPO list integration
+- JWT admin login and protected current-user endpoint
 
 ## Run Locally
 
@@ -60,11 +61,32 @@ npm --prefix apps/api run seed
 
 This command requires `MONGODB_URI` and can be run repeatedly without creating duplicate companies or IPOs.
 
+To create or update the first admin user, set these values only in `apps/api/.env`:
+
+```env
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=use-a-local-password
+ADMIN_NAME=Bluestock Admin
+```
+
+Then run:
+
+```powershell
+npm --prefix apps/api run seed:admin
+```
+
+Authentication endpoints:
+
+- `POST /api/v1/auth/login` with `{ "email": "...", "password": "..." }`
+- `POST /api/v1/auth/refresh` using the HTTP-only refresh cookie
+- `POST /api/v1/auth/logout` to clear the refresh cookie
+- `GET /api/v1/auth/me` with `Authorization: Bearer <access-token>`
+
 ## Phased Implementation
 
 1. **Foundation:** Express app, security middleware, environment validation, health route, React shell.
 2. **IPO domain:** Mongoose Company/IPO models, indexes, deterministic seed data, list/detail API, search/filter/sort/pagination, derived listing gain and current return. Initial public slice is implemented; Mongo-backed persistence and seed command remain next.
-3. **Authentication:** Admin user model, bcrypt password hashing, JWT access/refresh flow, protected routes, role checks.
+3. **Authentication:** Admin user model, bcrypt password hashing, JWT access token login, protected current-user route. Refresh cookies, role checks, and admin UI remain next.
 4. **Admin workflow:** Figma-aligned dashboard, IPO create/edit/delete, confirmation states, validation, and error handling.
 5. **Media:** Logo and RHP/DRHP uploads with MIME/size validation and cloud object storage metadata.
 6. **Quality and release:** Swagger/OpenAPI, API/UI tests, accessibility, CI, deployment, and production CORS configuration.
