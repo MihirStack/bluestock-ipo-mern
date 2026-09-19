@@ -17,6 +17,7 @@ Phase 1 is complete and Phase 2's first vertical slice is implemented:
 - Derived `listingGain` and `currentReturn` values in the API response
 - Repeatable MongoDB seed command and React public IPO list integration
 - JWT admin login and protected current-user endpoint
+- Admin-only IPO create, edit, delete API and dashboard form
 
 ## Run Locally
 
@@ -81,6 +82,12 @@ Authentication endpoints:
 - `POST /api/v1/auth/refresh` using the HTTP-only refresh cookie
 - `POST /api/v1/auth/logout` to clear the refresh cookie
 - `GET /api/v1/auth/me` with `Authorization: Bearer <access-token>`
+
+Admin IPO endpoints require an admin Bearer token:
+
+- `POST /api/v1/ipos` to create an IPO and upsert its company
+- `PATCH /api/v1/ipos/:id` to update an IPO
+- `DELETE /api/v1/ipos/:id` to delete an IPO
 
 ## Phased Implementation
 

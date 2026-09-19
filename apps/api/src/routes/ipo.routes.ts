@@ -1,7 +1,30 @@
 import { Router } from 'express'
-import { findIpoById, listIpos, parseListQuery } from '../services/ipo.service.js'
+import { requireAuth, requireRole } from '../middleware/auth.middleware.js'
+import {
+  createIpo,
+  deleteIpo,
+  findIpoById,
+  listIpos,
+  parseListQuery,
+  updateIpo,
+  validateIpoInput,
+} from '../services/ipo.service.js'
 
 const ipoRouter = Router()
+
+ipoRouter.post('/', requireAuth, requireRole('admin'), async (request, response, next) => {
+  try {
+    const parsed = validateIpoInput(request.body)
+    if (parsed.error) {
+      response.status(400).json({ success: false, message: parsed.error })
+      return
+    }
+    const ipo = await createIpo(parsed.value!)
+    response.status(201).json({ success: true, data: ipo })
+  } catch (error) {
+    next(error)
+  }
+})
 
 ipoRouter.get('/', async (request, response, next) => {
   try {
@@ -30,6 +53,36 @@ ipoRouter.get('/:id', async (request, response, next) => {
       return
     }
     response.json({ success: true, data: ipo })
+  } catch (error) {
+    next(error)
+  }
+})
+
+ipoRouter.patch('/:id', requireAuth, requireRole('admin'), async (request, response, next) => {
+  try {
+    const parsed = validateIpoInput(request.body)
+    if (parsed.error) {
+      response.status(400).json({ success: false, message: parsed.error })
+      return
+    }
+    const ipo = await updateIpo(String(request.params.id), parsed.value!)
+    if (!ipo) {
+      response.status(404).json({ success: false, message: 'IPO not found' })
+      return
+    }
+    response.json({ success: true, data: ipo })
+  } catch (error) {
+    next(error)
+  }
+})
+
+ipoRouter.delete('/:id', requireAuth, requireRole('admin'), async (request, response, next) => {
+  try {
+    if (!(await deleteIpo(String(request.params.id)))) {
+      response.status(404).json({ success: false, message: 'IPO not found' })
+      return
+    }
+    response.json({ success: true, message: 'IPO deleted successfully' })
   } catch (error) {
     next(error)
   }

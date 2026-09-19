@@ -21,3 +21,13 @@ export function requireAuth(request: AuthenticatedRequest, response: Response, n
     response.status(401).json({ success: false, message: 'Invalid or expired access token' })
   }
 }
+
+export function requireRole(...roles: string[]) {
+  return (request: AuthenticatedRequest, response: Response, next: NextFunction) => {
+    if (!request.auth || !roles.includes(request.auth.role)) {
+      response.status(403).json({ success: false, message: 'Insufficient permissions' })
+      return
+    }
+    next()
+  }
+}
