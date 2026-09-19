@@ -1,0 +1,28 @@
+{
+  "name": "bluestock-ipo-mern",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:web\" \"npm:dev:api\"",
+    "dev:web": "npm --prefix apps/web run dev",
+    "dev:api": "npm --prefix apps/api run dev",
+    "build": "npm run build:web && npm run build:api",
+    "build:web": "npm --prefix apps/web run build",
+    "build:api": "npm --prefix apps/api run build",
+    "format": "prettier --write \"**/*.{js,cjs,mjs,ts,tsx,json,css,md}\"",
+    "format:check": "prettier --check \"**/*.{js,cjs,mjs,ts,tsx,json,css,md}\"",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "check": "npm run format:check && npm run lint && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "prettier": "^3.7.4",
+    "typescript-eslint": "^8.47.0"
+  }
+}
