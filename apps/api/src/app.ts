@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import cookieParser from 'cookie-parser'
 import ipoRouter from './routes/ipo.routes.js'
 import authRouter from './routes/auth.routes.js'
+import uploadRouter from './routes/upload.routes.js'
 
 const app = express()
 app.use(helmet())
@@ -13,6 +14,7 @@ app.use(cookieParser())
 
 app.use('/api/v1/ipos', ipoRouter)
 app.use('/api/v1/auth', authRouter)
+app.use('/api/v1/uploads', uploadRouter)
 
 app.get('/api/v1/health', (_request, response) => {
   response.json({ success: true, data: { service: 'bluestock-ipo-api', status: 'ok' } })

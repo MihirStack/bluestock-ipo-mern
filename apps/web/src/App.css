@@ -212,6 +212,31 @@
     13px Georgia,
     serif;
 }
+.upload-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 13px;
+  margin: 18px 0;
+}
+.upload-grid label {
+  display: grid;
+  gap: 7px;
+  color: #526159;
+  font:
+    700 10px Arial,
+    sans-serif;
+  text-transform: uppercase;
+}
+.upload-grid input {
+  width: 100%;
+  border: 1px solid #b8b9ac;
+  padding: 9px;
+  background: rgba(255, 255, 255, 0.6);
+  color: #526159;
+  font:
+    12px Arial,
+    sans-serif;
+}
 .ipo-form > .close-button {
   margin-left: 16px;
 }
@@ -488,6 +513,9 @@ h1 {
   }
   .form-grid {
     grid-template-columns: 1fr 1fr;
+  }
+  .upload-grid {
+    grid-template-columns: 1fr;
   }
   .phase-card h3 {
     margin-top: 28px;

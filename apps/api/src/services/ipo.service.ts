@@ -18,7 +18,11 @@ export type IpoInput = {
   ipoPrice?: number
   listingPrice?: number
   currentMarketPrice?: number
+  logo?: MediaRef
+  rhp?: MediaRef
+  drhp?: MediaRef
 }
+type MediaRef = { url: string; publicId: string }
 export type IpoListQuery = {
   page: number
   limit: number
@@ -133,7 +137,11 @@ export async function createIpo(input: IpoInput) {
   ensureMongoConnection()
   const company = await CompanyModel.findOneAndUpdate(
     { slug: input.companySlug.trim().toLowerCase() },
-    { name: input.companyName.trim(), slug: input.companySlug.trim().toLowerCase() },
+    {
+      name: input.companyName.trim(),
+      slug: input.companySlug.trim().toLowerCase(),
+      ...(input.logo ? { logo: input.logo } : {}),
+    },
     { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
   ).exec()
   const record = new IpoModel(toIpoDocument(input, company._id as Types.ObjectId))
@@ -146,7 +154,11 @@ export async function updateIpo(id: string, input: IpoInput) {
   if (!Types.ObjectId.isValid(id)) return undefined
   const company = await CompanyModel.findOneAndUpdate(
     { slug: input.companySlug.trim().toLowerCase() },
-    { name: input.companyName.trim(), slug: input.companySlug.trim().toLowerCase() },
+    {
+      name: input.companyName.trim(),
+      slug: input.companySlug.trim().toLowerCase(),
+      ...(input.logo ? { logo: input.logo } : {}),
+    },
     { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
   ).exec()
   const record = await IpoModel.findByIdAndUpdate(id, toIpoDocument(input, company._id), {
@@ -179,6 +191,7 @@ function toIpoDocument(input: IpoInput, companyId: Types.ObjectId) {
     ipoPrice: input.ipoPrice,
     listingPrice: input.listingPrice,
     currentMarketPrice: input.currentMarketPrice,
+    ...(input.rhp || input.drhp ? { documents: { rhp: input.rhp, drhp: input.drhp } } : {}),
   }
 }
 

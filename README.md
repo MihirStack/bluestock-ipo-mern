@@ -18,6 +18,7 @@ Phase 1 is complete and Phase 2's first vertical slice is implemented:
 - Repeatable MongoDB seed command and React public IPO list integration
 - JWT admin login and protected current-user endpoint
 - Admin-only IPO create, edit, delete API and dashboard form
+- Protected logo, RHP, and DRHP uploads with Cloudinary storage
 
 ## Run Locally
 
@@ -88,6 +89,13 @@ Admin IPO endpoints require an admin Bearer token:
 - `POST /api/v1/ipos` to create an IPO and upsert its company
 - `PATCH /api/v1/ipos/:id` to update an IPO
 - `DELETE /api/v1/ipos/:id` to delete an IPO
+
+Media endpoints also require an admin Bearer token and a multipart field named `file`:
+
+- `POST /api/v1/uploads/logo` for JPEG, PNG, or WebP files up to 2 MB
+- `POST /api/v1/uploads/document` for PDF files up to 10 MB
+
+Configure `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET` in the API environment before uploading. The admin form uploads selected media first, then persists the returned URLs with the IPO record.
 
 ## Phased Implementation
 

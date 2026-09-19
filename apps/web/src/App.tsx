@@ -246,6 +246,9 @@ type AdminForm = {
   issueSize: string
   issueType: string
   status: string
+  logoFile?: File
+  rhpFile?: File
+  drhpFile?: File
 }
 
 const emptyAdminForm: AdminForm = {
@@ -280,10 +283,25 @@ function AdminDashboard({ token }: AdminDashboardProps) {
     event.preventDefault()
     const method = form.id ? 'PATCH' : 'POST'
     const endpoint = form.id ? `${apiBaseUrl}/ipos/${form.id}` : `${apiBaseUrl}/ipos`
+    const fields = {
+      companyName: form.companyName,
+      companySlug: form.companySlug,
+      priceBand: form.priceBand,
+      openDate: form.openDate,
+      closeDate: form.closeDate,
+      issueSize: form.issueSize,
+      issueType: form.issueType,
+      status: form.status,
+    }
+    const media = {
+      ...(form.logoFile ? { logo: await uploadFile(form.logoFile, 'logo', token) } : {}),
+      ...(form.rhpFile ? { rhp: await uploadFile(form.rhpFile, 'document', token) } : {}),
+      ...(form.drhpFile ? { drhp: await uploadFile(form.drhpFile, 'document', token) } : {}),
+    }
     const response = await fetch(endpoint, {
       method,
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...fields, ...media }),
     })
     const payload = (await response.json()) as { success: boolean; message?: string }
     if (!response.ok) {
@@ -393,6 +411,32 @@ function AdminDashboard({ token }: AdminDashboardProps) {
             </select>
           </label>
         </div>
+        <div className="upload-grid">
+          <label>
+            Company logo
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={(event) => updateFile('logoFile', event.target.files?.[0])}
+            />
+          </label>
+          <label>
+            RHP PDF
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(event) => updateFile('rhpFile', event.target.files?.[0])}
+            />
+          </label>
+          <label>
+            DRHP PDF
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={(event) => updateFile('drhpFile', event.target.files?.[0])}
+            />
+          </label>
+        </div>
         {message && <p className="message">{message}</p>}
         <button className="primary-button" type="submit">
           {form.id ? 'Save changes' : 'Create IPO'}
@@ -405,6 +449,27 @@ function AdminDashboard({ token }: AdminDashboardProps) {
       </form>
     </div>
   )
+
+  function updateFile(field: 'logoFile' | 'rhpFile' | 'drhpFile', file?: File) {
+    setForm((current) => ({ ...current, [field]: file }))
+  }
+}
+
+async function uploadFile(file: File, type: 'logo' | 'document', token: string) {
+  const body = new FormData()
+  body.append('file', file)
+  const response = await fetch(`${apiBaseUrl}/uploads/${type}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body,
+  })
+  const payload = (await response.json()) as {
+    success: boolean
+    message?: string
+    data?: { url: string; publicId: string }
+  }
+  if (!response.ok || !payload.data) throw new Error(payload.message ?? `Unable to upload ${type}.`)
+  return payload.data
 }
 
 function formatDate(value: string) {
