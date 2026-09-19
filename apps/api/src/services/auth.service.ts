@@ -39,6 +39,23 @@ export async function authenticateUser(email: string, password: string) {
   }
 }
 
+export async function registerUser(name: string, email: string, password: string) {
+  const normalizedEmail = email.toLowerCase().trim()
+  const existingUser = await UserModel.exists({ email: normalizedEmail })
+  if (existingUser) return undefined
+
+  const passwordHash = await bcrypt.hash(password, 12)
+  const user = await UserModel.create({
+    name: name.trim(),
+    email: normalizedEmail,
+    passwordHash,
+    role: 'editor',
+  })
+  const userData = { id: String(user._id), name: user.name, email: user.email, role: user.role }
+  const accessToken = createAccessToken(userData)
+  return { accessToken, user: userData }
+}
+
 export function verifyAccessToken(token: string) {
   return jwt.verify(token, accessSecret()) as AuthPayload
 }

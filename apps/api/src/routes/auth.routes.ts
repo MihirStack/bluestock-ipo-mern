@@ -4,6 +4,7 @@ import {
   authenticateUser,
   createAccessToken,
   createRefreshToken,
+  registerUser,
   refreshCookieName,
   refreshCookieOptions,
   verifyRefreshToken,
@@ -11,6 +12,39 @@ import {
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.middleware.js'
 
 const authRouter = Router()
+
+authRouter.post('/register', async (request, response, next) => {
+  try {
+    const { name, email, password } = request.body as {
+      name?: string
+      email?: string
+      password?: string
+    }
+    if (!name?.trim() || !email?.trim() || !password || password.length < 8) {
+      response.status(400).json({
+        success: false,
+        message: 'Name, email, and a password of at least 8 characters are required',
+      })
+      return
+    }
+    const result = await registerUser(name, email, password)
+    if (!result) {
+      response
+        .status(409)
+        .json({ success: false, message: 'An account with this email already exists' })
+      return
+    }
+    const refreshToken = createRefreshToken({
+      sub: result.user.id,
+      role: result.user.role,
+      email: result.user.email,
+    })
+    response.cookie(refreshCookieName, refreshToken, refreshCookieOptions())
+    response.status(201).json({ success: true, data: result })
+  } catch (error) {
+    next(error)
+  }
+})
 
 authRouter.post('/login', async (request, response, next) => {
   try {

@@ -19,6 +19,7 @@ Phase 1 is complete and Phase 2's first vertical slice is implemented:
 - JWT admin login and protected current-user endpoint
 - Admin-only IPO create, edit, delete API and dashboard form
 - Protected logo, RHP, and DRHP uploads with Cloudinary storage
+- Separate investor market, authentication, and admin operations interfaces
 
 ## Run Locally
 
@@ -79,10 +80,18 @@ npm --prefix apps/api run seed:admin
 
 Authentication endpoints:
 
+- `POST /api/v1/auth/register` for standard editor accounts
 - `POST /api/v1/auth/login` with `{ "email": "...", "password": "..." }`
 - `POST /api/v1/auth/refresh` using the HTTP-only refresh cookie
 - `POST /api/v1/auth/logout` to clear the refresh cookie
 - `GET /api/v1/auth/me` with `Authorization: Bearer <access-token>`
+
+Frontend routes:
+
+- `/` or `/market` is the public investor market terminal
+- `/market/:id` is the public IPO issue profile
+- `/login` and `/register` are dedicated authentication screens
+- `/admin` is a protected admin operations workspace
 
 Admin IPO endpoints require an admin Bearer token:
 

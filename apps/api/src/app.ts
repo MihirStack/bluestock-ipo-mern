@@ -32,6 +32,11 @@ app.use(
     _next: express.NextFunction,
   ) => {
     void _next
+    const parseError = error as { status?: number; type?: string }
+    if (parseError.status === 400 && parseError.type === 'entity.parse.failed') {
+      response.status(400).json({ success: false, message: 'Request body must contain valid JSON' })
+      return
+    }
     console.error(error)
     response.status(500).json({ success: false, message: 'Internal server error' })
   },
