@@ -14,6 +14,11 @@ export type SeedIpo = {
   documents: { rhp: { url: string; publicId: string }; drhp: { url: string; publicId: string } }
 }
 
+export function toSeedDocument(seed: SeedIpo) {
+  const { _id: seedKey, company, ...ipo } = seed
+  return { ...ipo, seedKey, companySeedKey: company._id }
+}
+
 export const seedIpos: SeedIpo[] = [
   {
     _id: 'seed-nova-mobility',

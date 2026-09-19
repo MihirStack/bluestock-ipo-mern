@@ -15,6 +15,7 @@ Phase 1 is complete and Phase 2's first vertical slice is implemented:
 - Public IPO list/detail API with search, status filtering, sorting, and pagination
 - Deterministic fallback seed records for local development without MongoDB credentials
 - Derived `listingGain` and `currentReturn` values in the API response
+- Repeatable MongoDB seed command and React public IPO list integration
 
 ## Run Locally
 
@@ -25,7 +26,7 @@ npm --prefix apps/api install
 npm run dev
 ```
 
-The client runs at `http://localhost:5173` and the API at `http://localhost:11000`.
+The client runs at `http://localhost:5173` and the API at `http://localhost:11001`.
 
 ## Code Quality Commands
 
@@ -43,12 +44,21 @@ For the API only:
 
 ```powershell
 npm --prefix apps/api run dev
-Invoke-RestMethod http://localhost:11000/api/v1/health
-Invoke-RestMethod 'http://localhost:11000/api/v1/ipos?status=listed&limit=10'
-Invoke-RestMethod http://localhost:11000/api/v1/ipos/seed-orbit-fintech
+Invoke-RestMethod http://localhost:11001/api/v1/health
+Invoke-RestMethod 'http://localhost:11001/api/v1/ipos?status=listed&limit=10'
+Invoke-RestMethod http://localhost:11001/api/v1/ipos/seed-orbit-fintech
 ```
 
 Copy `apps/api/.env.example` to `apps/api/.env` before adding MongoDB, JWT, and storage credentials. Secrets must not be committed.
+Copy `apps/web/.env.example` to `apps/web/.env` if the API base URL differs from the local default.
+
+To persist the deterministic records into MongoDB:
+
+```powershell
+npm --prefix apps/api run seed
+```
+
+This command requires `MONGODB_URI` and can be run repeatedly without creating duplicate companies or IPOs.
 
 ## Phased Implementation
 

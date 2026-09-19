@@ -10,3 +10,7 @@ export async function connectDatabase() {
   await mongoose.connect(uri)
   console.log('MongoDB connected')
 }
+
+export async function disconnectDatabase() {
+  if (mongoose.connection.readyState !== 0) await mongoose.disconnect()
+}

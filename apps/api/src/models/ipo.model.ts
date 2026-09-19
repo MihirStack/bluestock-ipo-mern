@@ -4,6 +4,7 @@ export const ipoStatuses = ['upcoming', 'ongoing', 'closed', 'listed'] as const
 
 const ipoSchema = new Schema(
   {
+    seedKey: { type: String, unique: true, sparse: true, index: true },
     company: { type: Schema.Types.ObjectId, ref: 'Company', required: true, index: true },
     priceBand: { type: String, required: true, trim: true },
     openDate: { type: Date, required: true, index: true },

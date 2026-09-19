@@ -2,7 +2,7 @@ import 'dotenv/config'
 import app from './app.js'
 import { connectDatabase } from './config/database.js'
 
-const port = Number(process.env.PORT ?? 11000)
+const port = Number(process.env.PORT ?? 11001)
 
 connectDatabase()
   .catch((error: unknown) => {

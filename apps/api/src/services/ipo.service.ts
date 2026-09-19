@@ -1,4 +1,5 @@
 import { Types } from 'mongoose'
+import '../models/company.model.js'
 import { IpoModel, type Ipo, ipoStatuses } from '../models/ipo.model.js'
 import { seedIpos, type SeedIpo } from '../data/seed.js'
 
