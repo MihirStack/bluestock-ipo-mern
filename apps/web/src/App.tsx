@@ -25,6 +25,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
+import { toAdminFormState, submitableIpoForm, type AdminIpoForm } from './lib/ipoForm'
 import './App.css'
 
 type Ipo = {
@@ -150,6 +151,17 @@ function MarketDetail() {
         <div className="detail-kicker">
           <span className={`status-badge ${ipo.status}`}>{ipo.status}</span>
           <span>IPO issue profile</span>
+        </div>
+        <div className="detail-branding">
+          {ipo.company.logo?.url ? (
+            <img
+              className="detail-company-logo"
+              src={ipo.company.logo.url}
+              alt={`${ipo.company.name} logo`}
+            />
+          ) : (
+            <span className="company-logo company-logo-large">{initials(ipo.company.name)}</span>
+          )}
         </div>
         <h1>{ipo.company.name}</h1>
         <p className="detail-lede">
@@ -383,9 +395,17 @@ function MarketPage() {
               {ipos.map((ipo, index) => (
                 <Link className="market-row" to={`/market/${ipo._id}`} key={ipo._id}>
                   <div className="company-cell">
-                    <span className={`company-logo logo-${index}`}>
-                      {initials(ipo.company.name)}
-                    </span>
+                    {ipo.company.logo?.url ? (
+                      <img
+                        className="company-logo-image logo-${index}"
+                        src={ipo.company.logo.url}
+                        alt={`${ipo.company.name} logo`}
+                      />
+                    ) : (
+                      <span className={`company-logo logo-${index}`}>
+                        {initials(ipo.company.name)}
+                      </span>
+                    )}
                     <span>
                       <strong>{ipo.company.name}</strong>
                       <small>{ipo.issueType ?? 'Book Built'} issue</small>
@@ -567,16 +587,280 @@ function AdminGuard() {
   return <AdminApp user={user} />
 }
 
+async function uploadAdminMedia(file: File, kind: 'logo' | 'document') {
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`${apiBaseUrl}/uploads/${kind}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {
+      Authorization: `Bearer ${token()}`,
+    },
+    body: formData,
+  })
+
+  const payload = (await response.json()) as ApiPayload<{
+    url: string
+    publicId: string
+    resourceType?: string
+  }>
+
+  if (!response.ok) throw new Error(payload.message ?? 'Media upload failed.')
+  return payload.data
+}
+
 function AdminApp({ user }: { user: User }) {
   const navigate = useNavigate()
   const location = useLocation()
   const section = location.pathname.split('/')[2] || 'dashboard'
   const [navOpen, setNavOpen] = useState(false)
+  const [ipos, setIpos] = useState<Ipo[]>([])
+  const [loadingIpos, setLoadingIpos] = useState(true)
+  const [formOpen, setFormOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState<AdminIpoForm>(toAdminFormState())
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [rhpFile, setRhpFile] = useState<File | null>(null)
+  const [drhpFile, setDrhpFile] = useState<File | null>(null)
+  const [uploadingMedia, setUploadingMedia] = useState(false)
+
+  async function loadIpos() {
+    try {
+      const payload = await api<Ipo[]>('/ipos?limit=50')
+      setIpos(payload.data)
+    } catch (error) {
+      setIpos([])
+      console.error(error)
+    } finally {
+      setLoadingIpos(false)
+    }
+  }
+
+  useEffect(() => {
+    let active = true
+
+    const load = async () => {
+      try {
+        const payload = await api<Ipo[]>('/ipos?limit=50')
+        if (!active) return
+        setIpos(payload.data)
+      } catch (error) {
+        if (!active) return
+        setIpos([])
+        console.error(error)
+      } finally {
+        if (active) setLoadingIpos(false)
+      }
+    }
+
+    void load()
+    return () => {
+      active = false
+    }
+  }, [])
+
   async function logout() {
     await fetch(`${apiBaseUrl}/auth/logout`, { method: 'POST', credentials: 'include' })
     localStorage.removeItem('bluestock_access_token')
     navigate('/login')
   }
+
+  function resetMediaFiles() {
+    setLogoFile(null)
+    setRhpFile(null)
+    setDrhpFile(null)
+  }
+
+  function openCreateForm() {
+    setEditingId(null)
+    setDraft(toAdminFormState())
+    setFormError('')
+    resetMediaFiles()
+    setFormOpen(true)
+  }
+
+  function openEditForm(ipo: Ipo) {
+    setEditingId(ipo._id)
+    setDraft(toAdminFormState(ipo))
+    setFormError('')
+    resetMediaFiles()
+    setFormOpen(true)
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    setSaving(true)
+    setFormError('')
+
+    try {
+      const mediaPayload: {
+        logo?: { url: string; publicId: string }
+        rhp?: { url: string; publicId: string }
+        drhp?: { url: string; publicId: string }
+      } = {}
+
+      setUploadingMedia(true)
+      if (logoFile) mediaPayload.logo = await uploadAdminMedia(logoFile, 'logo')
+      if (rhpFile) mediaPayload.rhp = await uploadAdminMedia(rhpFile, 'document')
+      if (drhpFile) mediaPayload.drhp = await uploadAdminMedia(drhpFile, 'document')
+
+      const payload = submitableIpoForm(draft, mediaPayload)
+      if (!payload.companyName || !payload.priceBand || !payload.issueSize || !payload.issueType) {
+        throw new Error('Company, pricing, and issue details are required.')
+      }
+
+      const method = editingId ? 'PATCH' : 'POST'
+      const endpoint = editingId ? `/ipos/${editingId}` : '/ipos'
+      const authHeaders = { Authorization: `Bearer ${token()}` }
+      await api<Ipo>(endpoint, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify(payload),
+      })
+      setFormOpen(false)
+      resetMediaFiles()
+      await loadIpos()
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : 'Unable to save this IPO.')
+    } finally {
+      setSaving(false)
+      setUploadingMedia(false)
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!window.confirm('Delete this IPO from the registry?')) return
+
+    try {
+      await fetch(`${apiBaseUrl}/ipos/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: { Authorization: `Bearer ${token()}` },
+      })
+      setIpos((current) => current.filter((ipo) => ipo._id !== id))
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  async function handleMediaUpload(ipoId: string, kind: 'logo' | 'rhp' | 'drhp', file: File) {
+    const existingIpo = ipos.find((ipo) => ipo._id === ipoId)
+    if (!existingIpo) throw new Error('IPO not found for this asset upload.')
+
+    const uploaded = await uploadAdminMedia(file, kind === 'logo' ? 'logo' : 'document')
+    const patchPayload = submitableIpoForm(toAdminFormState(existingIpo), {
+      ...(kind === 'logo' ? { logo: uploaded } : {}),
+      ...(kind === 'rhp' ? { rhp: uploaded } : {}),
+      ...(kind === 'drhp' ? { drhp: uploaded } : {}),
+    })
+
+    await api<Ipo>(`/ipos/${ipoId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token()}`,
+      },
+      body: JSON.stringify(patchPayload),
+    })
+
+    await loadIpos()
+  }
+
+  const ongoingCount = ipos.filter((ipo) => ipo.status === 'ongoing').length
+  const upcomingCount = ipos.filter((ipo) => ipo.status === 'upcoming').length
+  const nextUpcoming = ipos
+    .filter((ipo) => ipo.status === 'upcoming')
+    .sort((a, b) => new Date(a.openDate).getTime() - new Date(b.openDate).getTime())[0]
+  const returnAverage =
+    ipos.filter((ipo) => typeof ipo.currentReturn === 'number').length === 0
+      ? '—'
+      : `${(
+          ipos.reduce((sum, ipo) => sum + (ipo.currentReturn ?? 0), 0) /
+          ipos.filter((ipo) => typeof ipo.currentReturn === 'number').length
+        ).toFixed(2)}%`
+  const nextUpcomingLabel = nextUpcoming
+    ? new Date(nextUpcoming.openDate).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      })
+    : 'No upcoming IPOs'
+  const mediaEntries = ipos.flatMap((ipo) => {
+    const entries: Array<{
+      id: string
+      ipoId: string
+      kind: 'logo' | 'rhp' | 'drhp'
+      type: string
+      title: string
+      detail: string
+      url?: string
+      accent?: 'mint' | 'peach'
+    }> = []
+
+    entries.push({
+      id: `${ipo._id}-logo`,
+      ipoId: ipo._id,
+      kind: 'logo',
+      type: 'Company logo',
+      title: ipo.company.name,
+      detail: ipo.company.logo?.url ? 'Identity asset ready' : 'Awaiting logo upload',
+      url: ipo.company.logo?.url,
+      accent: 'peach',
+    })
+
+    if (ipo.documents?.rhp?.url) {
+      entries.push({
+        id: `${ipo._id}-rhp`,
+        ipoId: ipo._id,
+        kind: 'rhp',
+        type: 'RHP / PDF',
+        title: `${ipo.company.name} prospectus`,
+        detail: 'Public filing ready',
+        url: ipo.documents.rhp.url,
+        accent: 'mint',
+      })
+    } else {
+      entries.push({
+        id: `${ipo._id}-rhp-pending`,
+        ipoId: ipo._id,
+        kind: 'rhp',
+        type: 'RHP / PDF',
+        title: `${ipo.company.name} prospectus`,
+        detail: 'Awaiting upload',
+        accent: 'mint',
+      })
+    }
+
+    if (ipo.documents?.drhp?.url) {
+      entries.push({
+        id: `${ipo._id}-drhp`,
+        ipoId: ipo._id,
+        kind: 'drhp',
+        type: 'DRHP / PDF',
+        title: `${ipo.company.name} draft filing`,
+        detail: 'Draft document ready',
+        url: ipo.documents.drhp.url,
+      })
+    } else {
+      entries.push({
+        id: `${ipo._id}-drhp-pending`,
+        ipoId: ipo._id,
+        kind: 'drhp',
+        type: 'DRHP / PDF',
+        title: `${ipo.company.name} draft filing`,
+        detail: 'Awaiting upload',
+      })
+    }
+
+    return entries
+  })
+
   return (
     <div className="admin-shell">
       <aside className={`admin-sidebar ${navOpen ? 'open' : ''}`}>
@@ -635,7 +919,18 @@ function AdminApp({ user }: { user: User }) {
             <span>{user.name}</span>
           </div>
         </header>
-        {section !== 'dashboard' && <AdminSectionPreview section={section} />}
+        {section !== 'dashboard' && (
+          <AdminSectionPreview
+            section={section}
+            items={ipos}
+            mediaEntries={mediaEntries}
+            loading={loadingIpos}
+            onCreate={openCreateForm}
+            onEdit={openEditForm}
+            onDelete={handleDelete}
+            onUpload={handleMediaUpload}
+          />
+        )}
         <main className={`admin-content ${section !== 'dashboard' ? 'dashboard-hidden' : ''}`}>
           <div className="admin-page-title">
             <div>
@@ -643,33 +938,33 @@ function AdminApp({ user }: { user: User }) {
               <h1>Good morning, {user.name.split(' ')[0]}.</h1>
               <p>Here is what is happening across your IPO desk today.</p>
             </div>
-            <Link className="button button-orange" to="/admin/ipos">
+            <button className="button button-orange" onClick={openCreateForm}>
               <span>+ Add new IPO</span> <ArrowUpRight size={16} />
-            </Link>
+            </button>
           </div>
           <div className="admin-metrics">
             <Metric
               label="Total IPOs"
-              value="3"
-              detail="+1 this month"
+              value={String(ipos.length || 0)}
+              detail="Live registry"
               icon={<BarChart3 size={20} />}
             />
             <Metric
               label="Open now"
-              value="1"
-              detail="33.3% of registry"
+              value={String(ongoingCount)}
+              detail={`${ipos.length ? ((ongoingCount / ipos.length) * 100).toFixed(1) : '0.0'}% of registry`}
               icon={<TrendingUp size={20} />}
               green
             />
             <Metric
               label="Upcoming"
-              value="1"
-              detail="Next: 05 Oct 2026"
+              value={String(upcomingCount)}
+              detail={upcomingCount ? `Next: ${nextUpcomingLabel}` : 'No upcoming IPOs'}
               icon={<Bell size={20} />}
             />
             <Metric
               label="Avg. return"
-              value="+22.78%"
+              value={returnAverage === '—' ? '—' : `+${returnAverage}`}
               detail="Across listed issues"
               icon={<ArrowUpRight size={20} />}
               green
@@ -693,28 +988,20 @@ function AdminApp({ user }: { user: User }) {
                   <span>Window</span>
                   <span>Return</span>
                 </div>
-                <AdminRow
-                  name="Orbit Fintech"
-                  initials="OF"
-                  status="Listed"
-                  window="12 Aug 2026"
-                  returnValue="+22.78%"
-                />
-                <AdminRow
-                  name="Aster Health Systems"
-                  initials="AH"
-                  status="Ongoing"
-                  window="21–23 Sep 2026"
-                  returnValue="—"
-                  green
-                />
-                <AdminRow
-                  name="Nova Mobility"
-                  initials="NM"
-                  status="Upcoming"
-                  window="05–07 Oct 2026"
-                  returnValue="—"
-                />
+                {ipos.slice(0, 3).map((ipo) => (
+                  <AdminRow
+                    key={ipo._id}
+                    name={ipo.company.name}
+                    initials={initials(ipo.company.name)}
+                    logoUrl={ipo.company.logo?.url}
+                    status={ipo.status}
+                    window={`${formatDate(ipo.openDate)} – ${formatDate(ipo.closeDate)}`}
+                    returnValue={
+                      typeof ipo.currentReturn === 'number' ? `+${ipo.currentReturn}%` : '—'
+                    }
+                    green={ipo.status === 'ongoing'}
+                  />
+                ))}
               </div>
             </section>
             <section className="admin-card activity-card">
@@ -727,22 +1014,252 @@ function AdminApp({ user }: { user: User }) {
                   <span>•••</span>
                 </button>
               </div>
-              <Activity text="Orbit Fintech" detail="record updated" time="09:28" />
+              <Activity text="IPO registry" detail="synced with live backend" time="Now" />
               <Activity text="Media library" detail="awaiting uploads" time="09:11" />
-              <Activity
-                text="Aster Health Systems"
-                detail="status changed to ongoing"
-                time="Yesterday"
-              />
+              <Activity text="Desk operations" detail="status updates enabled" time="Today" />
             </section>
           </div>
         </main>
       </div>
+      {formOpen && (
+        <div className="admin-modal-backdrop" onClick={() => setFormOpen(false)}>
+          <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <div className="admin-modal-header">
+              <div>
+                <p className="kicker">Operations / registry</p>
+                <h2>{editingId ? 'Edit IPO' : 'Add IPO'}</h2>
+              </div>
+              <button onClick={() => setFormOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <form className="ipo-form" onSubmit={handleSubmit}>
+              <div className="form-grid">
+                <label>
+                  Company name
+                  <input
+                    value={draft.companyName}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, companyName: event.target.value }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Company slug
+                  <input
+                    value={draft.companySlug}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, companySlug: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  Price band
+                  <input
+                    value={draft.priceBand}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, priceBand: event.target.value }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Issue type
+                  <input
+                    value={draft.issueType}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, issueType: event.target.value }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Open date
+                  <input
+                    type="date"
+                    value={draft.openDate}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, openDate: event.target.value }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Close date
+                  <input
+                    type="date"
+                    value={draft.closeDate}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, closeDate: event.target.value }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Issue size
+                  <input
+                    value={draft.issueSize}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, issueSize: event.target.value }))
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Status
+                  <select
+                    value={draft.status}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        status: event.target.value as AdminIpoForm['status'],
+                      }))
+                    }
+                  >
+                    <option value="upcoming">Upcoming</option>
+                    <option value="ongoing">Ongoing</option>
+                    <option value="closed">Closed</option>
+                    <option value="listed">Listed</option>
+                  </select>
+                </label>
+                <label>
+                  Listing date
+                  <input
+                    type="date"
+                    value={draft.listingDate}
+                    onChange={(event) =>
+                      setDraft((current) => ({ ...current, listingDate: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  IPO price
+                  <input
+                    type="number"
+                    value={draft.ipoPrice}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        ipoPrice: event.target.value === '' ? '' : Number(event.target.value),
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Listing price
+                  <input
+                    type="number"
+                    value={draft.listingPrice}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        listingPrice: event.target.value === '' ? '' : Number(event.target.value),
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  Current market price
+                  <input
+                    type="number"
+                    value={draft.currentMarketPrice}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        currentMarketPrice:
+                          event.target.value === '' ? '' : Number(event.target.value),
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <div className="form-grid media-grid">
+                <label>
+                  Company logo
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)}
+                  />
+                  {logoFile && <small>{logoFile.name}</small>}
+                </label>
+                <label>
+                  RHP PDF
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(event) => setRhpFile(event.target.files?.[0] ?? null)}
+                  />
+                  {rhpFile && <small>{rhpFile.name}</small>}
+                </label>
+                <label>
+                  DRHP PDF
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    onChange={(event) => setDrhpFile(event.target.files?.[0] ?? null)}
+                  />
+                  {drhpFile && <small>{drhpFile.name}</small>}
+                </label>
+              </div>
+              {formError && <div className="form-error">{formError}</div>}
+              <div className="admin-modal-actions">
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  onClick={() => setFormOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="button button-orange"
+                  disabled={saving || uploadingMedia}
+                >
+                  {saving || uploadingMedia
+                    ? 'Saving media...'
+                    : editingId
+                      ? 'Update IPO'
+                      : 'Create IPO'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function AdminSectionPreview({ section }: { section: string }) {
+function AdminSectionPreview({
+  section,
+  items,
+  mediaEntries,
+  loading,
+  onCreate,
+  onEdit,
+  onDelete,
+  onUpload,
+}: {
+  section: string
+  items: Ipo[]
+  mediaEntries: Array<{
+    id: string
+    ipoId: string
+    kind: 'logo' | 'rhp' | 'drhp'
+    type: string
+    title: string
+    detail: string
+    url?: string
+    accent?: 'mint' | 'peach'
+  }>
+  loading: boolean
+  onCreate: () => void
+  onEdit: (ipo: Ipo) => void
+  onDelete: (id: string) => void
+  onUpload?: (ipoId: string, kind: 'logo' | 'rhp' | 'drhp', file: File) => Promise<void> | void
+}) {
   if (section === 'ipos')
     return (
       <section className="workspace-view">
@@ -752,47 +1269,54 @@ function AdminSectionPreview({ section }: { section: string }) {
             <h1>IPO registry.</h1>
             <p>Manage your live pipeline with a single, searchable source of truth.</p>
           </div>
-          <button className="button button-orange">
+          <button className="button button-orange" onClick={onCreate}>
             + Add new IPO <ArrowUpRight size={16} />
           </button>
         </div>
         <div className="preview-table admin-card">
-          <div className="preview-table-head">
+          <div className="preview-table-head registry-table-head">
             <span>Company</span>
             <span>Opening window</span>
             <span>Price band</span>
             <span>Issue size</span>
             <span>Status</span>
+            <span aria-hidden="true" />
           </div>
-          <PreviewRow
-            mark="OF"
-            name="Orbit Fintech"
-            window="12–14 Aug 2026"
-            price="₹150 – ₹158"
-            size="₹410 Cr"
-            status="Listed"
-          />
-          <PreviewRow
-            mark="AH"
-            name="Aster Health Systems"
-            window="21–23 Sep 2026"
-            price="₹265 – ₹278"
-            size="₹680 Cr"
-            status="Ongoing"
-            green
-          />
-          <PreviewRow
-            mark="NM"
-            name="Nova Mobility"
-            window="05–07 Oct 2026"
-            price="₹420 – ₹441"
-            size="₹1,240 Cr"
-            status="Upcoming"
-          />
+          {loading && <div className="loading-state">Loading registry...</div>}
+          {!loading && items.length === 0 && <div className="empty-state">No IPOs yet.</div>}
+          {!loading &&
+            items.map((ipo) => (
+              <div className="preview-row registry-row" key={ipo._id}>
+                <span className="preview-company">
+                  {ipo.company.logo?.url ? (
+                    <img
+                      className="admin-company-logo"
+                      src={ipo.company.logo.url}
+                      alt={`${ipo.company.name} logo`}
+                    />
+                  ) : (
+                    <i>{initials(ipo.company.name)}</i>
+                  )}
+                  <strong>{ipo.company.name}</strong>
+                </span>
+                <span>{`${formatDate(ipo.openDate)} – ${formatDate(ipo.closeDate)}`}</span>
+                <strong>{ipo.priceBand}</strong>
+                <span>{ipo.issueSize}</span>
+                <span className={`status-badge ${ipo.status}`}>{ipo.status}</span>
+                <span className="registry-actions">
+                  <button onClick={() => onEdit(ipo)}>Edit</button>
+                  <button className="delete-action" onClick={() => onDelete(ipo._id)}>
+                    Delete
+                  </button>
+                </span>
+              </div>
+            ))}
         </div>
       </section>
     )
-  if (section === 'uploads')
+  if (section === 'uploads') {
+    const quickUploadTarget = mediaEntries.find((entry) => !entry.url) ?? mediaEntries[0]
+
     return (
       <section className="workspace-view">
         <div className="view-heading">
@@ -801,34 +1325,57 @@ function AdminSectionPreview({ section }: { section: string }) {
             <h1>Media library.</h1>
             <p>Offer documents and company identity assets, ready for the public desk.</p>
           </div>
-          <button className="button button-orange">
-            <Upload size={16} /> Upload asset
-          </button>
+          {quickUploadTarget && onUpload ? (
+            <label className="button button-orange" style={{ cursor: 'pointer' }}>
+              <Upload size={16} /> Upload asset
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                style={{ display: 'none' }}
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  if (file) {
+                    void onUpload(quickUploadTarget.ipoId, quickUploadTarget.kind, file)
+                  }
+                  event.target.value = ''
+                }}
+              />
+            </label>
+          ) : (
+            <button className="button button-orange" type="button">
+              <Upload size={16} /> Upload asset
+            </button>
+          )}
         </div>
         <div className="asset-grid">
-          <AssetPreview
-            icon={<FileText size={30} />}
-            type="RHP / PDF"
-            title="Orbit Fintech prospectus"
-            detail="Awaiting upload"
-          />
-          <AssetPreview
-            icon={<FileText size={30} />}
-            type="DRHP / PDF"
-            title="Aster Health Systems draft"
-            detail="Document slot ready"
-            mint
-          />
-          <AssetPreview
-            icon={<Upload size={30} />}
-            type="Company logos"
-            title="3 identity slots"
-            detail="All records need a visual mark"
-            peach
-          />
+          {mediaEntries.slice(0, 6).map((entry) => (
+            <AssetPreview
+              key={entry.id}
+              icon={<FileText size={30} />}
+              type={entry.type}
+              title={entry.title}
+              detail={entry.detail}
+              mint={entry.accent === 'mint'}
+              peach={entry.accent === 'peach'}
+              href={entry.url}
+              imageUrl={entry.kind === 'logo' ? entry.url : undefined}
+              onUpload={
+                onUpload
+                  ? (event) => {
+                      const file = event.target.files?.[0]
+                      if (file) {
+                        void onUpload(entry.ipoId, entry.kind, file)
+                      }
+                      event.target.value = ''
+                    }
+                  : undefined
+              }
+            />
+          ))}
         </div>
       </section>
     )
+  }
   if (section === 'reports')
     return (
       <section className="workspace-view">
@@ -901,36 +1448,6 @@ function AdminSectionPreview({ section }: { section: string }) {
   )
 }
 
-function PreviewRow({
-  mark,
-  name,
-  window,
-  price,
-  size,
-  status,
-  green = false,
-}: {
-  mark: string
-  name: string
-  window: string
-  price: string
-  size: string
-  status: string
-  green?: boolean
-}) {
-  return (
-    <div className="preview-row">
-      <span className="preview-company">
-        <i>{mark}</i>
-        <strong>{name}</strong>
-      </span>
-      <span>{window}</span>
-      <strong>{price}</strong>
-      <span>{size}</span>
-      <span className={`status-badge ${green ? 'ongoing' : status.toLowerCase()}`}>{status}</span>
-    </div>
-  )
-}
 function AssetPreview({
   icon,
   type,
@@ -938,6 +1455,9 @@ function AssetPreview({
   detail,
   mint = false,
   peach = false,
+  href,
+  imageUrl,
+  onUpload,
 }: {
   icon: React.ReactNode
   type: string
@@ -945,15 +1465,37 @@ function AssetPreview({
   detail: string
   mint?: boolean
   peach?: boolean
+  href?: string
+  imageUrl?: string
+  onUpload?: (event: React.ChangeEvent<HTMLInputElement>) => void
 }) {
   return (
     <div
       className={`asset-preview admin-card ${mint ? 'mint-preview' : ''} ${peach ? 'peach-preview' : ''}`}
     >
-      <div className="asset-art">{icon}</div>
+      <div className="asset-art">
+        {imageUrl ? <img className="asset-image" src={imageUrl} alt={title} /> : icon}
+      </div>
       <span>{type}</span>
       <h3>{title}</h3>
       <p>{detail}</p>
+      {href ? (
+        <a className="asset-link" href={href} target="_blank" rel="noreferrer">
+          Open asset
+        </a>
+      ) : (
+        <span className="asset-placeholder">Awaiting upload</span>
+      )}
+      {onUpload && (
+        <label className="upload-toggle">
+          Upload file
+          <input
+            type="file"
+            accept={type.includes('logo') ? 'image/jpeg,image/png,image/webp' : 'application/pdf'}
+            onChange={onUpload}
+          />
+        </label>
+      )}
     </div>
   )
 }
@@ -983,6 +1525,7 @@ function Metric({
 function AdminRow({
   name,
   initials: mark,
+  logoUrl,
   status,
   window,
   returnValue,
@@ -990,6 +1533,7 @@ function AdminRow({
 }: {
   name: string
   initials: string
+  logoUrl?: string
   status: string
   window: string
   returnValue: string
@@ -998,7 +1542,11 @@ function AdminRow({
   return (
     <div className="mini-row">
       <span className="mini-company">
-        <i>{mark}</i>
+        {logoUrl ? (
+          <img className="admin-company-logo" src={logoUrl} alt={`${name} logo`} />
+        ) : (
+          <i>{mark}</i>
+        )}
         {name}
       </span>
       <span className={`status-badge ${status.toLowerCase()}`}>{status}</span>
