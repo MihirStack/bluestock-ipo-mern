@@ -14,6 +14,8 @@ import {
   BarChart3,
   Bell,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   LayoutDashboard,
   LogOut,
@@ -46,7 +48,12 @@ type Ipo = {
   documents?: { rhp?: { url: string }; drhp?: { url: string } }
 }
 type User = { id: string; name: string; email: string; role: string }
-type ApiPayload<T> = { success: boolean; message?: string; data: T; meta?: { total: number } }
+type ApiPayload<T> = {
+  success: boolean
+  message?: string
+  data: T
+  meta?: { page: number; limit: number; total: number; totalPages: number }
+}
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:11001/api/v1'
 
 async function api<T>(path: string, options?: RequestInit): Promise<ApiPayload<T>> {
@@ -239,13 +246,19 @@ function MarketPage() {
   const [ipos, setIpos] = useState<Ipo[]>([])
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [sort, setSort] = useState<'openDate' | 'listingDate' | 'company'>('openDate')
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc')
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   useEffect(() => {
     const controller = new AbortController()
-    const params = new URLSearchParams({ limit: '20' })
+    const params = new URLSearchParams({ limit: '20', page: String(page), sort, order })
     if (status) params.set('status', status)
     if (search.trim()) params.set('search', search.trim())
+    setLoading(true)
     fetch(`${apiBaseUrl}/ipos?${params}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('Unable to load IPO feed')
@@ -253,6 +266,8 @@ function MarketPage() {
       })
       .then((payload) => {
         setIpos(payload.data)
+        setTotal(payload.meta?.total ?? payload.data.length)
+        setTotalPages(payload.meta?.totalPages ?? 1)
         setError('')
       })
       .catch((requestError: unknown) => {
@@ -261,7 +276,7 @@ function MarketPage() {
       })
       .finally(() => setLoading(false))
     return () => controller.abort()
-  }, [search, status])
+  }, [order, page, search, sort, status])
   const listed = ipos.filter((ipo) => ipo.status === 'listed').length
   const active = ipos.filter((ipo) => ipo.status === 'ongoing').length
   return (
@@ -356,25 +371,59 @@ function MarketPage() {
                 placeholder="Search companies or issues"
               />
             </div>
+            <label className="sort-control">
+              <span>Sort by</span>
+              <select
+                value={`${sort}:${order}`}
+                onChange={(event) => {
+                  const [nextSort, nextOrder] = event.target.value.split(':') as [
+                    'openDate' | 'listingDate' | 'company',
+                    'asc' | 'desc',
+                  ]
+                  setSort(nextSort)
+                  setOrder(nextOrder)
+                  setPage(1)
+                }}
+              >
+                <option value="openDate:asc">Opening soon</option>
+                <option value="listingDate:desc">Recently listed</option>
+                <option value="company:asc">Company A-Z</option>
+              </select>
+            </label>
             <div className="segmented">
-              <button className={!status ? 'selected' : ''} onClick={() => setStatus('')}>
-                All <span>{ipos.length}</span>
+              <button
+                className={!status ? 'selected' : ''}
+                onClick={() => {
+                  setStatus('')
+                  setPage(1)
+                }}
+              >
+                All <span>{total}</span>
               </button>
               <button
                 className={status === 'upcoming' ? 'selected' : ''}
-                onClick={() => setStatus('upcoming')}
+                onClick={() => {
+                  setStatus('upcoming')
+                  setPage(1)
+                }}
               >
                 Upcoming
               </button>
               <button
                 className={status === 'ongoing' ? 'selected' : ''}
-                onClick={() => setStatus('ongoing')}
+                onClick={() => {
+                  setStatus('ongoing')
+                  setPage(1)
+                }}
               >
                 Open now
               </button>
               <button
                 className={status === 'listed' ? 'selected' : ''}
-                onClick={() => setStatus('listed')}
+                onClick={() => {
+                  setStatus('listed')
+                  setPage(1)
+                }}
               >
                 Listed
               </button>
@@ -423,6 +472,29 @@ function MarketPage() {
                   <ArrowUpRight size={17} />
                 </Link>
               ))}
+            </div>
+          )}
+          {!loading && !error && totalPages > 1 && (
+            <div className="market-pagination">
+              <span>
+                Page {page} of {totalPages}
+              </span>
+              <div>
+                <button
+                  aria-label="Previous page"
+                  disabled={page === 1}
+                  onClick={() => setPage((current) => current - 1)}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  aria-label="Next page"
+                  disabled={page === totalPages}
+                  onClick={() => setPage((current) => current + 1)}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
           )}
           {!loading && !error && ipos.length === 0 && (
