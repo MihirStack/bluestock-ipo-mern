@@ -651,6 +651,25 @@ button {
   margin-left: 4px;
   color: var(--orange);
 }
+.sort-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #7b8a81;
+  font:
+    10px 'DM Mono',
+    monospace;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sort-control select {
+  border: 1px solid #d8ded6;
+  border-radius: 0;
+  padding: 9px 28px 9px 10px;
+  background: white;
+  color: var(--ink);
+  font-size: 11px;
+}
 .detail-shell {
   min-height: 100vh;
   background: var(--paper);
@@ -939,6 +958,35 @@ button {
   border-top: 1px solid var(--line);
   color: #77847c;
   font-size: 14px;
+}
+.market-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+  padding: 16px 18px 0;
+  color: #77847c;
+  font:
+    10px 'DM Mono',
+    monospace;
+  text-transform: uppercase;
+}
+.market-pagination > div {
+  display: flex;
+  gap: 6px;
+}
+.market-pagination button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d8ded6;
+  background: white;
+  color: var(--ink);
+}
+.market-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 .trust-band {
   display: flex;
